@@ -1,0 +1,164 @@
+@import url('https://fonts.googleapis.com/css2?family=Creepster&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    /* Fondo con gradiente oscuro superpuesto a un patrón SVG */
+    background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
+                url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" fill="%231a1f16"/><path d="M0 0L100 100M100 0L0 100" stroke="%2325381d" stroke-width="1"/></svg>');
+    color: #8a0303;
+    font-family: 'Arial', sans-serif;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.container {
+    background-color: rgba(0, 0, 0, 0.8);
+    border: 3px solid #8a0303;
+    border-radius: 10px;
+    padding: 2rem;
+    width: 90%;
+    max-width: 450px;
+    box-shadow: 0 0 20px #8a0303, 0 0 40px #ff00004d;
+    position: relative;
+    overflow: hidden;
+}
+/* Pseudoelemento para crear un efecto de resplandor animado alrededor del contenedor */
+.container::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    z-index: -1; /* Lo coloca detrás del contenido del contenedor */
+    background: linear-gradient(45deg, #ff0000, #000000, #8a0303, #000000);
+    background-size: 400% 400%;
+    animation: glowing 3s ease infinite;  /* Aplica la animación */
+    filter: blur(5px); /* Difumina el efecto */
+}
+/* Animación para el efecto de resplandor */
+@keyframes glowing {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+h1 {
+    font-family: 'Creepster', cursive;
+    font-size: 3rem;
+    text-align: center;
+    margin-bottom: 1.5rem;
+    color: #8a0303;
+    text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000;
+    letter-spacing: 2px;
+}
+
+.subtitle {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+    color: #ccc;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-weight: bold;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #8a0303;
+    font-weight: bold;
+}
+
+input[type="text"] {
+    width: 100%;
+    padding: 12px;
+    background-color: #222;
+    border: 2px solid #8a0303;
+    border-radius: 5px;
+    color: #fff;
+    font-size: 1rem;
+    outline: none;
+    transition: all 0.3s;
+}
+
+input[type="text"]:focus {
+    box-shadow: 0 0 10px #8a0303;
+}
+
+button {
+    background-color: #8a0303;
+    color: #000;
+    border: none;
+    padding: 12px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+/* Efecto al pasar el mouse sobre el botón */
+button:hover {
+    background-color: #ff0000;
+    box-shadow: 0 0 15px #ff0000;
+    transform: translateY(-2px);
+}
+/* Efecto al hacer clic en el botón */
+button:active {
+    transform: translateY(0); /* Vuelve a su posición original */
+}
+/* Estilos para las salpicaduras de sangre decorativas */
+.blood-splatter {
+    position: absolute;
+    width: 100px;
+    height: 100px;
+      /* SVG inline para la salpicadura de sangre */
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M30,40 C25,30 15,25 20,10 C22,5 28,0 35,5 C40,10 45,25 30,40 Z" fill="%238a0303"/><path d="M60,30 C70,20 75,15 85,20 C90,22 95,28 90,35 C85,40 70,45 60,30 Z" fill="%238a0303"/><path d="M40,60 C30,70 25,75 20,85 C18,90 12,95 5,90 C0,85 5,70 20,60 C30,50 40,55 40,60 Z" fill="%238a0303"/></svg>');
+    opacity: 0.6;
+    z-index: -1;
+}
+/* Posicionamiento de la primera salpicadura de sangre */
+.blood-1 {
+    top: -30px;
+    left: -30px;
+    transform: rotate(45deg);
+}
+/* Posicionamiento de la segunda salpicadura de sangre */
+.blood-2 {
+    bottom: -40px;
+    right: -20px;
+    transform: rotate(-20deg);
+}
+/* Media query para adaptabilidad en dispositivos móviles */
+@media (max-width: 500px) {
+    h1 {
+        font-size: 2.5rem;
+    }
+    
+    .subtitle {
+        font-size: 1.2rem;
+    }
+    
+    .container {
+        padding: 1.5rem;
+    }
+}
