@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zombie Naval - Nivel 1</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        /* --- Estilos CSS (Sección de Apariencia) --- */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #1a1a1a;
+            color: #e0e0e0; /* Texto ligeramente más brillante */
+            font-family: 'Verdana', sans-serif;
+            flex-direction: column;
+            padding: 20px; /* Agregar relleno para vista móvil */
+        }
+        #game-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap; /* Permite que los elementos se envuelvan en pantallas pequeñas */
+            justify-content: center;
+            /* Solo contiene el canvas ahora, por lo que el ancho se autoajusta */
+        }
+        canvas {
+            border: 3px solid #660000; /* Borde más temático */
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.3), 0 0 5px rgba(255, 255, 255, 0.1); /* Efecto de brillo rojo */
+        }
+
+        /* Media query para pantallas más pequeñas */
+        @media (max-width: 860px) {
+            #game-container {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- --- Estructura HTML (Solo Contiene el Canvas) --- -->
+<div id="game-container">
+    <!-- El canvas de p5.js se insertará aquí -->
+</div>
+
+<!-- --- LÓGICA DEL JUEGO (p5.js) --- -->
+<script>
+    // Variables globales para p5.js
+    const CANVAS_W = 800; // Ancho del canvas
+    const CANVAS_H = 400; // Altura del canvas
+    const COLS = 10; // Columnas del tablero
+    const ROWS = 8; // Filas del tablero
+    const BOARD_MARGIN = 20; // Margen entre el borde y los tableros
+    const BOARD_WIDTH = (CANVAS_W - BOARD_MARGIN * 3) / 2; // Ancho de cada tablero
+    let CELL_SIZE; // Tamaño de la celda, calculado en setup
+
+    // Tamaños de los "Zombies" (barcos)
+    const SHIP_SIZES = [4, 3, 3, 2];
+
+    let boards;
+    let ships;
+    let phase; // 'placing', 'placementPass', 'playing', 'turnPass', 'finished'
+    let placingPlayer, placingShipIndex, orientation;
+    let currentTurn;
+    let turnPassFor;
+    let anims = [];
+    let previewCells = [];
+    let playerShots; // [J0_shots, J1_shots] <- Contador de disparos
+
+    // Función de inicialización de p5.js
+    window.setup = function() {
+        const canvas = createCanvas(CANVAS_W, CANVAS_H);
+        canvas.parent(document.getElementById('game-container'));
+        
+        CELL_SIZE = floor(BOARD_WIDTH / COLS);
+        if (CELL_SIZE * ROWS > CANVAS_H - 60) {
+            CELL_SIZE = floor((CANVAS_H - 60) / ROWS);
+            BOARD_WIDTH = CELL_SIZE * COLS;
+        }
+        textFont('Verdana');
+        initGame();
+    }
+
+    function initGame() {
+        boards = [createEmptyBoard(), createEmptyBoard()];
+        ships = [[], []];
+        for (let p = 0; p < 2; p++) {
+            ships[p] = [];
+            for (let s = 0; s < SHIP_SIZES.length; s++) {
+                let size = SHIP_SIZES[s];
+                ships[p].push({
+                    size: size,
+                    cells: [],
+                    hits: [],
+                    revealProgress: new Array(size).fill(0),
+                    placed: false
+                });
+            }
+        }
+        playerShots = [0, 0]; // Reiniciar contador de disparos
+        phase = "placing";
+        placingPlayer = 0;
+        placingShipIndex = 0;
+        orientation = 'H';
+        currentTurn = 0;
+        turnPassFor = null;
+        anims = [];
+        previewCells = [];
+    }
+
+    function createEmptyBoard() {
+        let b = [];
+        for (let y = 0; y < ROWS; y++) {
+            b[y] = [];
+            for (let x = 0; x < COLS; x++) b[y][x] = 0;
+        }
+        return b;
+    }
+
+    window.draw = function() {
+        background(10);
+        drawTitle();
+        drawBoardsViews();
+        updateAnims();
+        drawUI();
+        if (phase === 'turnPass' || phase === 'placementPass') drawPassOverlay(); 
+        if (phase === 'finished') drawFinishedOverlay();
+    }
+
+    function drawTitle() {
+        push();
+        fill(255, 50, 50);
+        textAlign(CENTER, CENTER);
+        textSize(20);
+        textStyle(BOLD);
+        text("🧟 ZOMBIE NAVAL ", width / 2, 18);
+        pop();
+    }
+
+    function drawBoardsViews() {
+        const leftX = BOARD_MARGIN, topY = 60;
+        const rightX = BOARD_MARGIN * 2 + BOARD_WIDTH;
+
+        drawBoard(0, leftX, topY);
+        drawBoard(1, rightX, topY);
+    }
+
+    function drawBoard(player, ox, oy) {
+        push();
+        translate(ox, oy);
+
+        // Título del jugador y contador de disparos
+        textSize(12);
+        textAlign(CENTER);
+        fill(200);
+        text(`J${player + 1} | Disparos: ${playerShots[player]}`, BOARD_WIDTH / 2, -16); // Mostrar disparos
+
+        // Fondo del tablero (rojo/negro)
+        fill(18);
+        rect(0, 0, BOARD_WIDTH, CELL_SIZE * ROWS, 6);
+
+        // Celdas base (efecto tablero negro/grís)
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                let cx = x * CELL_SIZE;
+                let cy = y * CELL_SIZE;
+                if ((x + y) % 2 === 0) fill(25); else fill(35);
+                rect(cx, cy, CELL_SIZE - 1, CELL_SIZE - 1, 4);
+            }
+        }
+
+        // Dibuja elementos de juego
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                let shinfo = boardShipAt(player, x, y);
+
+                if (boards[player][y][x] === 2) { // Golpe
+                    if (shinfo) {
+                        let sh = ships[player][shinfo.shipIndex];
+                        let prog = sh.revealProgress[shinfo.partIndex];
+                        if (prog && prog > 0) {
+                            drawRevealPieceAt(player, shinfo.shipIndex, shinfo.partIndex, x, y);
+                        } else {
+                            drawHitMark(x * CELL_SIZE, y * CELL_SIZE);
+                        }
+                    } else {
+                        drawHitMark(x * CELL_SIZE, y * CELL_SIZE);
+                    }
+                } else if (boards[player][y][x] === 3) { // Fallo
+                    drawMissMark(x * CELL_SIZE, y * CELL_SIZE);
+                } else {
+                    // Mostrar zombie solo si estamos en la fase de colocación/pase o si es su propio turno
+                    let showShip = (phase === 'placing' || phase === 'placementPass') && placingPlayer === player;
+                    showShip = showShip || (phase !== 'placing' && phase !== 'placementPass' && player === currentTurn);
+
+                    if (showShip && shinfo) {
+                        drawShipCellGraphic(shinfo.shipIndex, shinfo.partIndex, x * CELL_SIZE, y * CELL_SIZE);
+                    }
+                }
+            }
+        }
+
+        // Dibuja el preview de colocación solo si es la fase y el jugador correcto
+        if (phase === 'placing' && placingPlayer === player) {
+            drawPlacementPreviewAt(0, 0);
+        }
+
+        // Líneas de la cuadrícula
+        stroke(50, 120);
+        for (let gx = 0; gx <= COLS; gx++) {
+            line(gx * CELL_SIZE, 0, gx * CELL_SIZE, ROWS * CELL_SIZE);
+        }
+        for (let gy = 0; gy <= ROWS; gy++) {
+            line(0, gy * CELL_SIZE, COLS * CELL_SIZE, gy * CELL_SIZE);
+        }
+
+        pop();
+    }
+
+    function boardShipAt(player, x, y) {
+        let pls = ships[player];
+        for (let si = 0; si < pls.length; si++) {
+            let sh = pls[si];
+            for (let pi = 0; pi < sh.cells.length; pi++) {
+                let c = sh.cells[pi];
+                if (c.x === x && c.y === y) return { shipIndex: si, partIndex: pi, ship: sh };
+            }
+        }
+        return null;
+    }
+
+    function drawShipCellGraphic(shipIndex, partIndex, cx, cy) {
+        push();
+        translate(cx + CELL_SIZE / 2, cy + CELL_SIZE / 2);
+        rectMode(CENTER);
+        noStroke();
+        fill(90, 0, 0); // Rojo oscuro
+        rect(0, 0, CELL_SIZE * 0.85, CELL_SIZE * 0.85, 5);
+        fill(130, 0, 0, 180);
+        rect(0, 0, CELL_SIZE * 0.7, CELL_SIZE * 0.18);
+        pop();
+    }
+
+    function drawRevealPieceAt(player, shipIndex, partIndex, gx, gy) {
+        let sh = ships[player][shipIndex];
+        let prog = sh.revealProgress[partIndex];
+        let cx = gx * CELL_SIZE;
+        let cy = gy * CELL_SIZE;
+        push();
+        translate(cx + CELL_SIZE / 2, cy + CELL_SIZE / 2);
+        rectMode(CENTER);
+        fill(50, 5, 5);
+        rect(0, 0, CELL_SIZE * 0.9, CELL_SIZE * 0.9, 6);
+        
+        push();
+        scale(prog); 
+        noStroke();
+        fill(120, 200, 120); // Verde pálido (zombie)
+        ellipse(0, -6, CELL_SIZE * 0.45, CELL_SIZE * 0.45);
+        fill(80, 150, 80);
+        ellipse(0, 6, CELL_SIZE * 0.55, CELL_SIZE * 0.55);
+        fill(36, 36, 36);
+        ellipse(-CELL_SIZE * 0.06, -7, CELL_SIZE * 0.06, CELL_SIZE * 0.06);
+        ellipse(CELL_SIZE * 0.06, -7, CELL_SIZE * 0.06, CELL_SIZE * 0.06);
+        stroke(36);
+        strokeWeight(1);
+        line(-CELL_SIZE * 0.06, -2, CELL_SIZE * 0.06, -1);
+        pop();
+        pop();
+    }
+
+    function drawHitMark(cx, cy) {
+        push();
+        translate(cx, cy);
+        noStroke();
+        fill(255, 0, 0, 230); // Rojo brillante
+        rect(4, 4, CELL_SIZE - 8, CELL_SIZE - 8, 3);
+        pop();
+    }
+
+    function drawMissMark(cx, cy) {
+        push();
+        translate(cx + CELL_SIZE / 2, cy + CELL_SIZE / 2);
+        noStroke();
+        fill(80, 80, 80, 210); // Gris hueso
+        ellipse(0, -6, CELL_SIZE * 0.45, CELL_SIZE * 0.45);
+        fill(20);
+        ellipse(-CELL_SIZE * 0.06, -7, CELL_SIZE * 0.06, CELL_SIZE * 0.06);
+        ellipse(CELL_SIZE * 0.06, -7, CELL_SIZE * 0.06, CELL_SIZE * 0.06);
+        stroke(20);
+        line(-CELL_SIZE * 0.06, CELL_SIZE * 0.05, CELL_SIZE * 0.06, CELL_SIZE * 0.05);
+        pop();
+    }
+
+    function drawPlacementPreviewAt(offsetX, offsetY) {
+        let boardOx = (placingPlayer === 0 ? BOARD_MARGIN : (BOARD_MARGIN * 2 + BOARD_WIDTH));
+        let mx = mouseX - boardOx;
+        let my = mouseY - 60;
+        let gx = floor(mx / CELL_SIZE);
+        let gy = floor(my / CELL_SIZE);
+        previewCells = [];
+        let sh = ships[placingPlayer][placingShipIndex];
+        if (!sh) return;
+        
+        for (let i = 0; i < sh.size; i++) {
+            let x = gx + (orientation === 'H' ? i : 0);
+            let y = gy + (orientation === 'V' ? i : 0);
+            previewCells.push({ x, y });
+        }
+        
+        let valid = placementValid(placingPlayer, previewCells);
+        
+        for (let c of previewCells) {
+            if (c.x < 0 || c.y < 0 || c.x >= COLS || c.y >= ROWS) valid = false;
+        }
+        
+        for (let c of previewCells) {
+            if (c.x < 0 || c.y < 0 || c.x >= COLS || c.y >= ROWS) continue;
+            let px = c.x * CELL_SIZE;
+            let py = c.y * CELL_SIZE;
+            noStroke();
+            if (valid) fill(50, 200, 50, 160);
+            else fill(255, 50, 50, 140);
+            rect(px + 2, py + 2, CELL_SIZE - 5, CELL_SIZE - 5, 4);
+        }
+    }
+
+    function placementValid(player, cells) {
+        for (let c of cells) {
+            if (c.x < 0 || c.y < 0 || c.x >= COLS || c.y >= ROWS) return false;
+            if (boardShipAt(player, c.x, c.y)) return false;
+        }
+        return true;
+    }
+
+    // --- Manejadores de Eventos ---
+
+    window.keyPressed = function() {
+        if (phase === 'placing' && (key === 'r' || key === 'R')) {
+            orientation = (orientation === 'H' ? 'V' : 'H');
+        }
+        
+        // Manejar el pase de colocación
+        if (phase === 'placementPass' && (key === ' ' || key === 'ENTER')) {
+            phase = 'placing';
+            placingPlayer = 1; 
+            placingShipIndex = 0; // Reinicia el índice para el Jugador 2
+            turnPassFor = null;
+            return;
+        }
+
+        // Manejar el pase de turno de juego
+        if (phase === 'turnPass' && (key === ' ' || key === 'ENTER')) {
+            phase = 'playing';
+            return;
+        }
+    }
+
+    window.mousePressed = function() {
+        if (phase === 'turnPass' || phase === 'placementPass' || phase === 'finished') return;
+
+        const leftX = BOARD_MARGIN, topY = 60;
+        const rightX = BOARD_MARGIN * 2 + BOARD_WIDTH;
+
+        if (phase === 'placing') {
+            let boardOx = (placingPlayer === 0 ? leftX : rightX);
+            // Verifica que el clic esté dentro del tablero del jugador activo
+            if (mouseX >= boardOx && mouseX < boardOx + BOARD_WIDTH && mouseY >= topY && mouseY < topY + ROWS * CELL_SIZE) {
+                let gx = floor((mouseX - boardOx) / CELL_SIZE);
+                let gy = floor((mouseY - topY) / CELL_SIZE);
+                let sh = ships[placingPlayer][placingShipIndex];
+                if (!sh) return;
+                let cells = [];
+                for (let i = 0; i < sh.size; i++) {
+                    let x = gx + (orientation === 'H' ? i : 0);
+                    let y = gy + (orientation === 'V' ? i : 0);
+                    cells.push({ x, y });
+                }
+                if (placementValid(placingPlayer, cells)) {
+                    sh.cells = cells;
+                    sh.hits = new Array(sh.size).fill(false);
+                    sh.revealProgress = new Array(sh.size).fill(0);
+                    sh.placed = true;
+                    for (let c of cells) boards[placingPlayer][c.y][c.x] = 1;
+                    
+                    placingShipIndex++;
+                    if (placingShipIndex >= ships[placingPlayer].length) {
+                        if (placingPlayer === 0) {
+                            // P1 terminó la colocación -> Pasar al P2 para colocación
+                            startPlacementPass(); 
+                        } else {
+                            // P2 terminó la colocación -> Iniciar juego con pase de turno
+                            currentTurn = 0;
+                            startTurnPass();
+                        }
+                    }
+                } else {
+                    anims.push({ type: 'invalidPlace', x: mouseX, y: mouseY, t: 0, duration: 20 });
+                }
+            }
+            return;
+        }
+
+        if (phase === 'playing') {
+            let target = 1 - currentTurn;
+            let boardOx = (target === 0 ? leftX : rightX);
+            let boardOy = topY;
+            
+            if (mouseX >= boardOx && mouseX < boardOx + BOARD_WIDTH && mouseY >= boardOy && mouseY < boardOy + ROWS * CELL_SIZE) {
+                let gx = floor((mouseX - boardOx) / CELL_SIZE);
+                let gy = floor((mouseY - boardOy) / CELL_SIZE);
+                if (gx < 0 || gy < 0 || gx >= COLS || gy >= ROWS) return;
+                
+                if (boards[target][gy][gx] === 2 || boards[target][gy][gx] === 3) {
+                    anims.push({ type: 'alreadyShot', x: mouseX, y: mouseY, t: 0, duration: 20 });
+                    return;
+                }
+                
+                // REGISTRAR DISPARO
+                playerShots[currentTurn]++; 
+
+                let shinfo = boardShipAt(target, gx, gy);
+                let hit = shinfo !== null;
+
+                if (hit) {
+                    boards[target][gy][gx] = 2;
+                    handleHit(target, shinfo.shipIndex, shinfo.partIndex);
+                    
+                    if (checkGameOver()) {
+                        phase = 'finished';
+                    } else {
+                        anims.push({ type: 'hitFeedback', x: mouseX, y: mouseY, t: 0, duration: 30 });
+                        // Turno no cambia (mantiene el golpe)
+                    }
+                } else {
+                    boards[target][gy][gx] = 3;
+                    anims.push({ type: 'missFeedback', x: mouseX, y: mouseY, t: 0, duration: 30 });
+                    
+                    currentTurn = target; // Cambiar turno al oponente
+                    startTurnPass();
+                }
+            }
+        }
+    }
+
+    // --- Funciones de Interfaz de Usuario y Lógica de Juego ---
+    
+    // Función para iniciar el pase de colocación (P1 -> P2)
+    function startPlacementPass() {
+        turnPassFor = 1; // El siguiente jugador que debe colocar (Jugador 2)
+        phase = 'placementPass';
+    }
+
+    // Función para iniciar el pase de turno (durante el juego)
+    function startTurnPass() {
+        turnPassFor = currentTurn;
+        phase = 'turnPass';
+    }
+
+    function drawUI() {
+        push();
+        
+        fill(200);
+        textSize(14);
+        textAlign(LEFT, TOP);
+
+        if (phase === 'placing') {
+            let msg = `J${placingPlayer + 1}: Coloca Zombie de largo ${SHIP_SIZES[placingShipIndex]}. Orientación: ${orientation === 'H' ? 'HORIZONTAL' : 'VERTICAL'}. (R para rotar)`;
+            text(msg, BOARD_MARGIN, 360);
+        } else if (phase === 'playing') {
+            let opponent = 1 - currentTurn;
+            text(`TURNO J${currentTurn + 1}. Haz clic en el tablero de J${opponent + 1} para atacar.`, BOARD_MARGIN, 360);
+        } else if (phase === 'finished') {
+            text(`¡Juego terminado! El ganador es J${currentTurn + 1} con ${playerShots[currentTurn]} disparos.`, BOARD_MARGIN, 360);
+        }
+        
+        for (let anim of anims) {
+            if (anim.type === 'invalidPlace' || anim.type === 'alreadyShot') {
+                push();
+                textAlign(CENTER, CENTER);
+                textSize(16);
+                fill(255, 50, 50);
+                textStyle(BOLD);
+                text(anim.type === 'invalidPlace' ? '¡COLOCACIÓN INVÁLIDA!' : '¡YA DISPARASTE AHÍ!', anim.x, anim.y - anim.t * 0.5);
+                pop();
+            }
+        }
+
+        pop();
+    }
+
+    // Único overlay que maneja el pase de colocación y el pase de turno
+    function drawPassOverlay() {
+        push();
+        fill(0, 0, 0, 240);
+        rect(0, 0, CANVAS_W, CANVAS_H);
+
+        fill(255, 100, 100);
+        textAlign(CENTER, CENTER);
+        textSize(32);
+
+        let message;
+        let instruction;
+        let nextPlayer = turnPassFor + 1;
+
+        if (phase === 'turnPass') {
+            message = `Pasa el dispositivo al Jugador ${nextPlayer}`;
+            instruction = `Presiona ESPACIO o ENTER para comenzar tu turno de ataque.`;
+        } else if (phase === 'placementPass') {
+            message = `JUGADOR ${nextPlayer}: Es tu turno de colocar ZOMBIES.`;
+            instruction = `Presiona ESPACIO o ENTER para comenzar la colocación.`;
+        }
+        
+        text(message, CANVAS_W / 2, CANVAS_H / 2 - 30);
+        textSize(20);
+        text(instruction, CANVAS_W / 2, CANVAS_H / 2 + 20);
+        pop();
+    }
+
+    function drawFinishedOverlay() {
+        push();
+        fill(0, 0, 0, 240);
+        rect(0, 0, CANVAS_W, CANVAS_H);
+
+        fill(255, 50, 50);
+        textAlign(CENTER, CENTER);
+        textSize(48);
+        textStyle(BOLD);
+        text(`¡JUGADOR ${currentTurn + 1} GANA!`, CANVAS_W / 2, CANVAS_H / 2);
+        textSize(24);
+        fill(255, 200, 0);
+        text(`Con ${playerShots[currentTurn]} Disparos`, CANVAS_W / 2, CANVAS_H / 2 + 50);
+        textSize(16);
+        fill(200);
+        text(`(Reinicia la página para un nuevo juego)`, CANVAS_W / 2, CANVAS_H / 2 + 100);
+        pop();
+    }
+
+    function checkGameOver() {
+        let opponent = 1 - currentTurn;
+        let allSunk = true;
+        for (let sh of ships[opponent]) {
+            if (sh.hits.includes(false)) {
+                allSunk = false;
+                break;
+            }
+        }
+        return allSunk;
+    }
+
+    function handleHit(player, shipIndex, partIndex) {
+        let sh = ships[player][shipIndex];
+        sh.hits[partIndex] = true;
+
+        anims.push({
+            type: 'reveal',
+            player: player,
+            ship: sh,
+            partIndex: partIndex,
+            t: 0,
+            duration: 40
+        });
+
+        let sunk = sh.hits.every(h => h === true);
+        if (sunk) {
+            anims.push({
+                type: 'sunkMessage',
+                player: player,
+                t: 0,
+                duration: 120
+            });
+        }
+    }
+
+    function updateAnims() {
+        for (let i = anims.length - 1; i >= 0; i--) {
+            let anim = anims[i];
+            anim.t++;
+
+            if (anim.type === 'reveal') {
+                let sh = anim.ship;
+                sh.revealProgress[anim.partIndex] = constrain(anim.t / anim.duration, 0, 1);
+            }
+
+            if (anim.t > anim.duration) {
+                anims.splice(i, 1);
+            }
+        }
+    }
+</script>
+</body>
+</html>
